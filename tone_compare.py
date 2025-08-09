@@ -1,14 +1,19 @@
+import os, time
 import sounddevice as sd
 import numpy as np
 import scipy.signal as signal
 from scipy.io.wavfile import write
-import time
+import src.util_funcs as ut
 
-# Set-ExecutionPolicy Unrestricted -Scope Process
+# Handle command line argument(s)
+parsed_args = ut.parse_named_args()
+filename_cfg = parsed_args.get('cfgFile', os.path.join('.', 'config.csv'))
+
+cfg = ut.read_and_parse_config_file(filename_cfg)
 
 # Parameters
-duration = 10  # seconds
-sample_rate = 44100  # Hz
+duration_s = cfg.get('DURATION_s', 1)  
+sample_rate_Hz = cfg.get('SAMPLE_RATE_Hz', 44100)
 target_freqs = [440, 880]  # Example: A4 and A5
 
 def list_input_devices():
@@ -25,10 +30,10 @@ def select_device():
     sd.default.device = (index, None)
     print(f"Using device: {devices[index]['name']}")
 
-def get_fft_peak_ratio(audio, sample_rate, freqs):
+def get_fft_peak_ratio(audio, sample_rate_Hz, freqs):
     # FFT
     fft_data = np.fft.rfft(audio)
-    fft_freqs = np.fft.rfftfreq(len(audio), 1/sample_rate)
+    fft_freqs = np.fft.rfftfreq(len(audio), 1/sample_rate_Hz)
     magnitudes = np.abs(fft_data)
 
     # Find closest bins
@@ -37,12 +42,12 @@ def get_fft_peak_ratio(audio, sample_rate, freqs):
     ratio = values[0] / values[1] if values[1] != 0 else np.inf
     return values, ratio
 
-def get_time_domain_ratio(audio, sample_rate, freqs):
+def get_time_domain_ratio(audio, sample_rate_Hz, freqs):
     # Bandpass filters
     values = []
     for f in freqs:
         band = [f - 10, f + 10]
-        sos = signal.butter(4, band, btype='bandpass', fs=sample_rate, output='sos')
+        sos = signal.butter(4, band, btype='bandpass', fs=sample_rate_Hz, output='sos')
         filtered = signal.sosfilt(sos, audio)
         amplitude = np.sqrt(np.mean(filtered**2))  # RMS
         values.append(amplitude)
@@ -54,21 +59,21 @@ def main():
     print(f"Monitoring frequencies: {target_freqs[0]} Hz and {target_freqs[1]} Hz")
     print("Press Ctrl+C to stop.")
 
-    audio_data = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=2, dtype='int16')
+    audio_data = sd.rec(int(duration_s * sample_rate_Hz), samplerate=sample_rate_Hz, channels=2, dtype='int16')
     sd.wait()  # Wait until recording is finished
 
-    write("output.wav", sample_rate, audio_data)
+    write("output.wav", sample_rate_Hz, audio_data)
 
     return
 
     try:
         while True:
-            audio = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='float32')
+            audio = sd.rec(int(duration_s * sample_rate_Hz), samplerate=sample_rate_Hz, channels=1, dtype='float32')
             sd.wait()
             audio = audio.flatten()
 
-            fft_vals, fft_ratio = get_fft_peak_ratio(audio, sample_rate, target_freqs)
-            time_vals, time_ratio = get_time_domain_ratio(audio, sample_rate, target_freqs)
+            fft_vals, fft_ratio = get_fft_peak_ratio(audio, sample_rate_Hz, target_freqs)
+            time_vals, time_ratio = get_time_domain_ratio(audio, sample_rate_Hz, target_freqs)
 
             print(f"\n--- {time.strftime('%H:%M:%S')} ---")
             print(f"FFT Magnitudes: {fft_vals}, Ratio: {fft_ratio:.2f}")

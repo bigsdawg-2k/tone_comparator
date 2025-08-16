@@ -1,19 +1,21 @@
-import os, time
+import os, time, yaml
 import sounddevice as sd
 import numpy as np
 import scipy.signal as signal
 from scipy.io.wavfile import write
-import src.util_funcs as ut
+import utils.util_funcs as ut
 
 # Handle command line argument(s)
 parsed_args = ut.parse_named_args()
-filename_cfg = parsed_args.get('cfgFile', os.path.join('.', 'config.csv'))
+filename_cfg = parsed_args.get('cfgFile', os.path.join('.', 'config.yaml'))
 
-cfg = ut.read_and_parse_config_file(filename_cfg)
+# Parse config file and load values
+with open(filename_cfg, 'r') as f:
+    cfg = yaml.safe_load(f)
+    
+duration_s = cfg['duration_s']
+sample_rate_Hz = cfg['sample_rate_Hz']
 
-# Parameters
-duration_s = cfg.get('DURATION_s', 1)  
-sample_rate_Hz = cfg.get('SAMPLE_RATE_Hz', 44100)
 target_freqs = [440, 880]  # Example: A4 and A5
 
 def list_input_devices():

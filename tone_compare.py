@@ -18,16 +18,40 @@ sample_rate_Hz = cfg['sample_rate_Hz']
 
 target_freqs = [440, 880]  # Example: A4 and A5
 
-def list_input_devices():
+def list_input_devices() -> sd.DeviceList:
+    """
+    List the available input devices.
+
+    Returns:
+        sd.DeviceList: List of input devices.
+    """
+    
     print("Available input devices:")
     devices = sd.query_devices()
     for i, dev in enumerate(devices):
         if dev['max_input_channels'] > 0:
             print(f"{i}: {dev['name']}")
+    
     return devices
 
-def select_device():
-    devices = list_input_devices()
+def list_wav_files(path_folder:str, idx_offset:int) -> list[str]:
+    """
+    List wav files in folder with a selectable index starting from idx_offset.
+
+    Args:
+        path_folder (str): _description_
+        idx_offset (int): Starting offset for selectable index during printing.
+
+    Returns:
+        list[str]: Filenames of wav files in folder.
+    """
+    filenames = [f for f in os.listdir(path_folder) if f.lower().endswith('.wav')]
+    for i in range(len(filenames)):
+        print(f"{i + idx_offset}: {filenames[i]}")
+    
+    return filenames
+
+def select_device(devices:sd.DeviceList):
     index = int(input("Select input device index: "))
     sd.default.device = (index, None)
     print(f"Using device: {devices[index]['name']}")
@@ -57,6 +81,11 @@ def get_time_domain_ratio(audio, sample_rate_Hz, freqs):
     return values, ratio
 
 def main():
+
+    # List devices and wav
+    devices = list_input_devices()
+    list_wav_files(cfg['path_wav_folder'], len(devices))
+    
     select_device()
     print(f"Monitoring frequencies: {target_freqs[0]} Hz and {target_freqs[1]} Hz")
     print("Press Ctrl+C to stop.")

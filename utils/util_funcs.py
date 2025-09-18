@@ -1,9 +1,13 @@
-import os, sys, math
+import sys, math
 import numpy as np
 from scipy.signal import butter, filtfilt
+from scipy.io import wavfile
 from typing import Tuple
+import matplotlib.pyplot as plt
 
+# def analyze_transitions(wfm: np.ndarray, threshold: float, pos_edge: bool) -> tuple[float, float, int]:
 def analyze_transitions(wfm: np.ndarray, threshold: float, pos_edge: bool) -> tuple[float, float, int]:
+
     """Analyze waveform transitions across a threshold.
 
     Args:
@@ -37,7 +41,7 @@ def analyze_transitions(wfm: np.ndarray, threshold: float, pos_edge: bool) -> tu
         mean = 0.0
         std = 0.0
 
-    count = len(transition_indices)
+    count = len(durations)
 
     return mean, std, count
 
@@ -84,7 +88,14 @@ def create_filter_butterworth(bw_filt_Hz:float, sample_rate_Hz:float, order:int)
     b,a = butter(order, normalized_cutoff_Hz, btype="low")
     return b,a
 
-def create_filtered_square_wave_with_guassian(freq_Hz:float, duration_s:float, sample_rate_Hz:float, period_std_s:float, filt_coefs:Tuple[np.ndarray, np.ndarray]) -> np.ndarray:
+def create_filtered_square_wave_with_guassian(
+    freq_Hz:        float, 
+    duration_s:     float, 
+    sample_rate_Hz: float, 
+    period_std_s:   float, 
+    filt_coefs:     Tuple[np.ndarray, np.ndarray], 
+    filename:       str=""
+    ) -> np.ndarray:
     """
     Create a square wave wfm of a given frequency, duration, and sample rate while having a period that varies with 
     a standard deviation.
@@ -96,23 +107,18 @@ def create_filtered_square_wave_with_guassian(freq_Hz:float, duration_s:float, s
         duration_s (float): Duration of the waveform in seconds.
         sample_rate_Hz (float): Sample rate of the waveform in Hz.
         period_std_s (float): Standard deviation of the period length is s.
+        filename (str, optional): Filename of the .wav file to save.  If empty, then nothing is saved.
 
     Returns:
         np.ndarray: Array of wfm samples
     """
-    # Determine the period length in samples
-    period_n = sample_rate_Hz / freq_Hz
-    if period_n == int(period_n):
-        period_n = int(period_n)
-    else:
-        print(f"Detected non-integer period ({period_n}), rounding down to nearest full sample {math.floor(period_n)}.")
-        period_n = math.floor(period_n)
     
     # Generate a ndarray of floats of the period durations in seconds, for each period, following a normal 
     # distribution.
     duration_n = math.ceil(duration_s * sample_rate_Hz)
     rand_gen = np.random.default_rng()
     period_std_n = period_std_s * sample_rate_Hz
+    period_n = sample_rate_Hz / freq_Hz # Keep these fractional, as part of normal dist to round.
     periods_n = rand_gen.normal(period_n, period_std_n, math.ceil(duration_n / period_n)).round().astype(int)
 
     # Create waveform array
@@ -132,6 +138,10 @@ def create_filtered_square_wave_with_guassian(freq_Hz:float, duration_s:float, s
 
     # Apply low-pass filter
     wfm_filtered = filtfilt(filt_coefs[0], filt_coefs[1], wfm)
+           
+    # Save if requested
+    if len(filename) > 0:
+        wavfile.write(filename, sample_rate_Hz, wfm)
            
     return wfm_filtered
 

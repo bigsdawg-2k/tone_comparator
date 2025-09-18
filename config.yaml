@@ -1,3 +1,5 @@
 # Configuration file for sound.py
 sample_rate_Hz: 44100
 duration_s: 0.5 # Capture duration in seconds
+
+path_wav_folder: './wav'

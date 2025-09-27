@@ -3,10 +3,10 @@ sample_rate_Hz: 44100
 duration_s: 0.5 # Capture duration in seconds
 
 # Waveform construction format:
-# [type, freq_Hz, sample_rate_Hz, period_std_s]
+# [type, freq_Hz, duration_s, sample_rate_Hz, period_std_s]
 # Just a string is filename
 debug:
   waveforms:
-    - ['square', 440, 192E3, 0]
-    - ['square', 880, 192E3, 0]
-    - wav/test_wav_A440_44.wav
+    - ['square', 440, 2, 192E3, 2E-6]
+    - ['square', 880.5, 5, 192E3, 2E-6]
+    - wav/test_wav_A1760_44.wav

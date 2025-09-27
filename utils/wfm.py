@@ -69,11 +69,32 @@ class Wfm(ABC):
             if isinstance(orig_filter_settings, FilterButterworth):
                 self.wfm = filtfilt(filter_list_item[1][0], filter_list_item[1][1], self.wfm)        
 
-    def _read_wave(self, filepath:str):
+    def _read_wave(self, filepath: str):
         
-        wave_read = wave.open(filepath, mode='rb')
-        self.sample_rate_Hz = wave_read.getframerate()
-        self.wfm = wave_read.readframes(wave_read.getnframes())
+        with wave.open(filepath, mode='rb') as wave_read:
+            self.sample_rate_Hz = wave_read.getframerate()
+            n_channels = wave_read.getnchannels()
+            sampwidth = wave_read.getsampwidth()
+            n_frames = wave_read.getnframes()
+            audio_bytes = wave_read.readframes(n_frames)
+
+        # Determine dtype
+        if sampwidth == 2:
+            dtype = np.int16
+        elif sampwidth == 4:
+            dtype = np.int32
+        else:
+            raise ValueError(f"Unsupported sample width: {sampwidth}")
+
+        # Convert bytes to numpy array
+        audio = np.frombuffer(audio_bytes, dtype=dtype)
+
+        # If multi-channel, reshape and average to mono
+        if n_channels > 1:
+            audio = audio.reshape(-1, n_channels)
+            audio = audio.mean(axis=1).astype(dtype)
+
+        self.wfm = audio.astype(np.float32) / np.iinfo(dtype).max  # Normalize to [-1, 1] float
             
     @abstractmethod
     def _create_wfm(self):
@@ -84,7 +105,7 @@ class WfmSquare(Wfm):
     def __init__(self, freq_Hz:float=None, duration_s:float=None, period_std_s:float=None, sample_rate_Hz:int=None, filepath:str=None):
         
         # Sanitize arguments
-        if (period_std_s and freq_Hz) and period_std_s > 0.25 * 1 / freq_Hz:
+        if filepath is not None and (period_std_s and freq_Hz) and period_std_s > 0.25 * 1 / freq_Hz:
             raise ValueError(f'Period standard deviation exceeds 25% of full period.')
         
         super().__init__(freq_Hz, duration_s, sample_rate_Hz, filepath)

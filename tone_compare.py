@@ -5,6 +5,7 @@ import numpy as np
 import scipy.signal as signal
 from scipy.io.wavfile import write
 import utils.util_funcs as ut
+from utils.wfm import WfmSquare, FilterButterworth
 
 def input_devices_as_list() -> list:
     """
@@ -23,7 +24,7 @@ def parse_debug_waveforms(debug_waveforms:dict, ) -> list[str, list]:
         if isinstance(item, str):
             parsed.append(['file', item])
         elif isinstance(item, list):
-            parsed.append([item[0], [int(item[1]), float(item[2]), int(item[3])]])
+            parsed.append([item[0], [float(item[1]), float(item[2]), float(item[3]), float(item[4])]])
         else:
             raise TypeError(f'Unexpected debug waveform format.')
         
@@ -46,13 +47,13 @@ def select_devices(devices:List[Union[sd.DeviceList, dict, str]]) -> List[int]:
         if user_input == "":
             break
         try:
-            idx = int(user_input)
-            if 0 <= idx < len(devices):
-                selected_indexes.append(idx)
-                if isinstance(devices[idx], dict):
-                    print(f"Selected: {devices[idx]['name']}")
+            m = int(user_input)
+            if 0 <= m < len(devices):
+                selected_indexes.append(m)
+                if isinstance(devices[m], dict):
+                    print(f"Selected: {devices[m]['name']}")
                 else:
-                    print(f"Selected: {devices[idx][0]} {devices[idx][1]}")
+                    print(f"Selected: {devices[m][0]} {devices[m][1]}")
             else:
                 print("Index out of range.")
         except ValueError:
@@ -104,6 +105,8 @@ def main():
         
     duration_s = cfg['duration_s']
     sample_rate_Hz = cfg['sample_rate_Hz']
+    
+    print(f'\nDuration is set to {duration_s}s.  \nFrequency resolution limited to {1/duration_s:.3f}Hz\n')
 
     # Get devices and debug settings
     devices = input_devices_as_list()
@@ -130,26 +133,62 @@ def main():
     
     print("\nPress Ctrl+C to stop.\n")
     try:
-        idx = 0
+        m = 0
+        last_dev_freq_Hz = None
         while True:
-            # audio = sd.rec(int(duration_s * sample_rate_Hz), samplerate=sample_rate_Hz, channels=1, dtype='float32')
-            # sd.wait()
-            # audio = audio.flatten()
-
-            # fft_vals, fft_ratio = get_fft_peak_ratio(audio, sample_rate_Hz, target_freqs)
-            # time_vals, time_ratio = get_time_domain_ratio(audio, sample_rate_Hz, target_freqs)
-
-            # print(f"\n--- {time.strftime('%H:%M:%S')} ---")
-            # print(f"FFT Magnitudes: {fft_vals}, Ratio: {fft_ratio:.2f}")
-            # print(f"Time-Domain RMS: {time_vals}, Ratio: {time_ratio:.2f}")
-            print(f'{idx}')
-
-            time.sleep(0.5)
             
+            this_dev = devices[selected_indexes[m]]
+            
+            # Handle sound device case
+            if isinstance(this_dev, dict) and 'hostapi' in this_dev.keys():
+                print(f'Sound device: {this_dev['name']}. {duration_s}s@{sample_rate_Hz}Hz')
+                sd.default.device = (this_dev['index'], None)
+                audio = sd.rec(int(duration_s * sample_rate_Hz), samplerate=sample_rate_Hz, channels=this_dev['max_input_channels'], dtype='float32')
+                sd.wait()
+                # Convert to mono if needed
+                if audio.ndim > 1 and audio.shape[1] > 1:
+                    wfm_data = np.mean(audio, axis=1)
+                else:
+                    wfm_data = audio.flatten()
+                sr_Hz = sample_rate_Hz
+            
+            # Handle the waveform case
+            elif isinstance(this_dev, list) and this_dev[0] == 'square':
+                print(f'Generating waveform: {this_dev}')
+                wfm = WfmSquare(this_dev[1][0], this_dev[1][1], this_dev[1][3], sample_rate_Hz=this_dev[1][2])
+                wfm.add_filter_to_list(FilterButterworth(wfm.sample_rate_Hz, 10000, 10, "low"))
+                wfm.create_wfm()
+                wfm_data = wfm.wfm
+                sr_Hz = wfm.sample_rate_Hz
+                time.sleep(len(wfm_data)/sr_Hz)
+                                
+            # Handle the filename case
+            elif isinstance(this_dev, list) and this_dev[0] == 'file':
+                print(f'File: {this_dev}')
+                wfm = WfmSquare(filepath=this_dev[1])
+                wfm_data = wfm.wfm
+                sr_Hz = wfm.sample_rate_Hz
+                time.sleep(len(wfm_data)/sr_Hz)
+                
+            # Otherwise
+            else:
+                raise ValueError(f'Unexpected device: {this_dev}')
+
+            freq_Hz = ut.calculate_fundamental_frequency(wfm_data, sr_Hz)
+            
+            # Calculate ratio if there is a previous result then print result
+            if last_dev_freq_Hz is not None:
+                str_compare = f', Ratio={freq_Hz/last_dev_freq_Hz:.3f}'
+            else:
+                str_compare = ''
+            print(f'Freq={freq_Hz}Hz{str_compare}')
+
+            # Look for space to advance
             while not keypress_queue.empty():
                 msg = keypress_queue.get()
                 if msg == 'space':
-                    idx = (idx + 1) % len(selected_indexes)
+                    m = (m + 1) % len(selected_indexes)
+                    last_dev_freq_Hz = freq_Hz
             
     except KeyboardInterrupt:
         print("\nStopped.")

@@ -1,10 +1,12 @@
-import math
+import math, os
 import numpy as np
 import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 from enum import Enum
 from dataclasses import dataclass
 from scipy.signal import butter, filtfilt
+from scipy.io.wavfile import write
+import wave
 
 @dataclass
 class FilterButterworth:
@@ -15,13 +17,23 @@ class FilterButterworth:
     
 class Wfm(ABC):
     
-    def __init__(self, freq_Hz:float, duration_s:float, sample_rate_Hz:int=192000):
+    C_DEFAULT_SR_Hz = 192000
+    
+    def __init__(self, freq_Hz:float=None, duration_s:float=None, sample_rate_Hz:int=None, filepath:str=None):
         
-        self.freq_Hz = freq_Hz
-        self.sample_rate_Hz = sample_rate_Hz
-        self.duration_s = duration_s
+        if not filepath and (not freq_Hz and not duration_s):
+            raise ValueError(f'You must specify at least one of (filepath) or (freq_Hz and duration_s)')
+        
         self._filter_list = []
         self.wfm = []
+        
+        if filepath:
+            self._read_wave(filepath)
+        else:        
+            self.freq_Hz = freq_Hz
+            self.duration_s = duration_s
+            if freq_Hz:
+                self.sample_rate_Hz = sample_rate_Hz or Wfm.C_DEFAULT_SR_Hz
         
     def add_filter_to_list(self, filter_settings:FilterButterworth):
         
@@ -38,26 +50,44 @@ class Wfm(ABC):
         self._create_wfm()
         self._apply_filters()
     
+    def write_wave(self, filepath:str):
+        
+        # TODO, Make this a little more dynamic...
+        bits_n = 16
+        scale = 0.8 * (((2**bits_n)/2)-1) / max(self.wfm) # 80% of full-scale
+        wfm_scaled = (self.wfm * scale).astype(np.int16)
+        with wave.open(filepath, mode='wb') as wave_write:
+            wave_write.setframerate(self.sample_rate_Hz)
+            wave_write.setnchannels(1)
+            wave_write.setsampwidth(int(bits_n/8)) 
+            wave_write.writeframes(wfm_scaled.tobytes())
+        
     def _apply_filters(self):
         
         for filter_list_item in self._filter_list:
             orig_filter_settings = filter_list_item[0]
             if isinstance(orig_filter_settings, FilterButterworth):
                 self.wfm = filtfilt(filter_list_item[1][0], filter_list_item[1][1], self.wfm)        
+
+    def _read_wave(self, filepath:str):
+        
+        wave_read = wave.open(filepath, mode='rb')
+        self.sample_rate_Hz = wave_read.getframerate()
+        self.wfm = wave_read.readframes(wave_read.getnframes())
             
     @abstractmethod
     def _create_wfm(self):
-        pass
+        raise NotImplementedError(f'_create_wfm not implemented in Wfm')
 
 class WfmSquare(Wfm):
     
-    def __init__(self, freq_Hz:float, duration_s:float, period_std_s:float=0, sample_rate_Hz:int=192000):
+    def __init__(self, freq_Hz:float=None, duration_s:float=None, period_std_s:float=None, sample_rate_Hz:int=None, filepath:str=None):
         
         # Sanitize arguments
-        if period_std_s > 0.25 * 1 / freq_Hz:
+        if (period_std_s and freq_Hz) and period_std_s > 0.25 * 1 / freq_Hz:
             raise ValueError(f'Period standard deviation exceeds 25% of full period.')
         
-        super().__init__(freq_Hz, duration_s, sample_rate_Hz)
+        super().__init__(freq_Hz, duration_s, sample_rate_Hz, filepath)
         self.period_std_s = period_std_s
     
     def _create_wfm(self):

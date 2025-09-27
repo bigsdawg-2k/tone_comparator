@@ -2,4 +2,11 @@
 sample_rate_Hz: 44100
 duration_s: 0.5 # Capture duration in seconds
 
-path_wav_folder: './wav'
+# Waveform construction format:
+# [type, freq_Hz, sample_rate_Hz, period_std_s]
+# Just a string is filename
+debug:
+  waveforms:
+    - ['square', 440, 192E3, 0]
+    - ['square', 880, 192E3, 0]
+    - wav/test_wav_A440_44.wav

@@ -1,6 +1,6 @@
-import pytest
+import pytest, os
 import utils.util_funcs as ut
-from utils.wfm import WfmSquare, FilterButterworth
+from utils.wfm import Wfm, WfmSquare, FilterButterworth
 
 @pytest.mark.parametrize("freq_Hz, duration_s, period_std_n", [
     (880, 1, 5),
@@ -40,11 +40,51 @@ def test_create_square_wave_with_guassian(freq_Hz, duration_s, period_std_n):
     print(f"  Expected fft_freq (Hz)={freq_Hz}; measured={freq_fft_Hz}, resolution={1/duration_s}Hz")
     assert freq_fft_Hz == pytest.approx(freq_Hz, abs=0.01*freq_Hz)
     
+@pytest.mark.parametrize("filepath, freq_Hz, duration_s, sample_rate_Hz", [
+    ('test_wav_del_me.wav', 440, 1, 192000),
+    ('test_wav_del_me.wav', 440, 1, 44100)
+])
+def test_create_write_wav(filepath: str, freq_Hz:float, duration_s:float, sample_rate_Hz:int):
     
-def test_create_wav_filter_squarewave_file(filepath: str, sample_rate_Hz:int, freq_Hz:float, duration_s:float):
+    C_PERIOD_STD_s = 0.01/1E3
     
-    # Create a waveform
-    b,a = ut.create_filter_butterworth(bw_filt_Hz=10E3, sample_rate_Hz=sample_rate_Hz, order=10)
-    wfm = ut.create_filtered_square_wave_with_guassian(freq_Hz, duration_s, sample_rate_Hz, period_std_s, (b,a))
+    if os.path.exists(filepath):
+        os.remove(filepath)        
+    assert os.path.exists(filepath) == False
     
+    # Create a waveform and then save it.
+    wfm = WfmSquare(freq_Hz, duration_s, C_PERIOD_STD_s, sample_rate_Hz)
+    wfm.create_wfm()
+    wfm.write_wave(filepath)
+    
+    assert os.path.exists(filepath) == True
+    
+    if os.path.exists(filepath):
+        os.remove(filepath)
+    
+@pytest.mark.parametrize("freq_Hz, duration_s", [
+    (880, 1)
+])
+def test_create_wfm_from_file(freq_Hz:float, duration_s:float):
+    
+    C_FILEPATH_TEMP = 'test_wave_del_me.wav'
+    C_PERIOD_STD_s = 0.01/1E3
+    filepath = C_FILEPATH_TEMP
+    
+    if os.path.exists(filepath):
+        os.remove(filepath)        
+    assert os.path.exists(filepath) == False
+    
+    # Create a waveform and then save it.
+    wfm = WfmSquare(freq_Hz, duration_s, C_PERIOD_STD_s)
+    wfm.create_wfm()
+    wfm.write_wave(filepath)
+    
+    assert os.path.exists(filepath) == True
+    
+    wfm2 = WfmSquare(filepath=filepath)
+    assert wfm2.sample_rate_Hz == WfmSquare.C_DEFAULT_SR_Hz
+        
+    if os.path.exists(filepath):
+        os.remove(filepath)
     
